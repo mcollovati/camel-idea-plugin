@@ -52,6 +52,7 @@ import org.apache.camel.idea.service.CamelPreferenceService;
 import org.apache.camel.idea.service.CamelService;
 import org.apache.camel.idea.util.CamelIdeaUtils;
 import org.apache.camel.idea.util.CamelRouteSearchScope;
+import org.apache.camel.idea.util.IdeaUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -157,6 +158,9 @@ public class CamelRouteLineMarkerProvider extends RelatedItemLineMarkerProvider 
                 .map(PsiElement::getReference)
                 .map(PsiReference::resolve)
                 .filter(resolved -> PsiVariable.class.isInstance(resolved) || PsiMethod.class.isInstance(resolved));
+        }
+        if (IdeaUtils.isScalaLanguage(element)) {
+            return IdeaUtils.asScalaIdentifierExpression(element);
         }
         return Optional.empty();
     }

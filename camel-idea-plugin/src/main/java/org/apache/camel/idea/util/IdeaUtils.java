@@ -22,6 +22,8 @@ import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
 import com.intellij.codeInsight.completion.CompletionUtil;
 import com.intellij.lang.java.JavaLanguage;
@@ -40,6 +42,7 @@ import com.intellij.psi.PsiLiteralExpression;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiMethodCallExpression;
 import com.intellij.psi.PsiPolyadicExpression;
+import com.intellij.psi.PsiReference;
 import com.intellij.psi.impl.source.tree.LeafPsiElement;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiTreeUtil;
@@ -108,7 +111,7 @@ public final class IdeaUtils {
             if (stripWhitespace) {
                 return getInnerText(text);
             }
-            return  StringUtil.unquoteString(text.replace(QUOT, "\""));
+            return StringUtil.unquoteString(text.replace(QUOT, "\""));
         }
 
         // maybe its xml then try that
@@ -192,7 +195,7 @@ public final class IdeaUtils {
             if (stripWhitespace) {
                 return getInnerText(text);
             }
-            return  StringUtil.unquoteString(text.replace(QUOT, "\""));
+            return StringUtil.unquoteString(text.replace(QUOT, "\""));
         }
 
         return null;
@@ -570,7 +573,64 @@ public final class IdeaUtils {
     public static boolean isFromScalaMethod(PsiElement element, String... methods) {
         // need to walk a bit into the psi tree to find the element that holds the method call name
         // (yes we need to go up till 5 levels up to find the method call expression
+        //System.out.println("========== Inspect " + element.getText() + " --> " + element.toString());
+        Optional<PsiElement> isLiteral = asScalaLiteralExpression(element);
+        /*
+        isLiteral.ifPresent(el ->
+            System.out.println("============ Literal " + element.getText() + " of type " + element.toString() + " with parent " +
+                Optional.ofNullable(element.getParent()).map(PsiElement::toString).orElse("---"))
+        );
+        */
+        Optional<PsiElement> isIdentifier = asScalaIdentifierExpression(element);
+        /*
+        isIdentifier.ifPresent(el ->
+            System.out.println("============ Identifier " + element.getText() + " of type " + element.toString() + " with parent " +
+                Optional.ofNullable(element.getParent()).map(PsiElement::toString).orElse("---") +
+            " resolved: " + el.toString())
+        );
+        */
+        return (isLiteral.isPresent() || isIdentifier.isPresent())
+            && Optional.ofNullable(PsiTreeUtil.findFirstParent(element, true, parent -> "MethodCall".equals(parent.toString())))
+            .flatMap(methodCall -> Optional.ofNullable(element.getParent())
+                .map(PsiElement::getParent).filter(twoUp -> !methodCall.equals(twoUp))
+                .map(x -> methodCall)).map(PsiElement::getFirstChild)
+            .map(PsiElement::getText).filter(name -> Arrays.stream(methods).anyMatch(name::equals))
+            .isPresent();
+    }
+
+    public static Optional<PsiElement> asScalaLiteralExpression(PsiElement element) {
+        Objects.requireNonNull(element);
         String kind = element.toString();
+        if (kind.startsWith("PsiElement") && kind.contains("string content")) {
+            return Optional.ofNullable(element.getParent())
+                .filter(parent -> parent.toString().equals("Literal"))
+                .map(parent -> element);
+        }
+        return Optional.empty();
+    }
+
+    public static Optional<PsiElement> asScalaIdentifierExpression(PsiElement element) {
+        Objects.requireNonNull(element);
+        String kind = element.toString();
+        if (kind.startsWith("PsiElement") && kind.contains("identifier")) {
+            return Optional.ofNullable(element.getParent())
+                .filter(parent -> parent.toString().startsWith("ReferenceExpression:"))
+                .map(PsiElement::getReference)
+                .map(PsiReference::resolve)
+                .filter(el ->
+                    el.toString().startsWith("ReferencePattern: ")
+                        || el.toString().startsWith("ScFunctionDefinition: ")
+                );
+        }
+        return Optional.empty();
+    }
+
+
+    public static boolean isFromScalaMethodOld(PsiElement element, String... methods) {
+        // need to walk a bit into the psi tree to find the element that holds the method call name
+        // (yes we need to go up till 5 levels up to find the method call expression
+        String kind = element.toString();
+
         // must be a string kind
         if (kind.contains("string")) {
             for (int i = 0; i < 5; i++) {
